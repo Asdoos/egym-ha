@@ -26,6 +26,10 @@ class EgymCoordinator(DataUpdateCoordinator):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL)
         self.api = api
         self.entry = entry
+        # Pausiert den Netpulse-Login nach einer Auth-Ablehnung (401/403), damit ein
+        # falsch konfiguriertes Passwort nicht stuendlich neu probiert -> Konto-Sperre.
+        # In-memory: Reload/Neustart der Integration hebt die Pause auf.
+        self._np_paused = False
 
     async def _async_update_data(self) -> dict:
         try:
@@ -57,7 +61,9 @@ class EgymCoordinator(DataUpdateCoordinator):
                 "capacity": capacity}
 
     async def _capacity(self) -> dict | None:
-        """Netpulse Studio-Auslastung. Optional: Fehler kippen nur diesen Poll."""
+        """Netpulse Studio-Auslastung. Auth-Ablehnung pausiert bis Reload."""
+        if self._np_paused:
+            return None
         client = NetpulseCapacityClient(
             self.api.session,
             self.entry.data[CONF_EMAIL], self.entry.data[CONF_PASSWORD],
@@ -66,7 +72,12 @@ class EgymCoordinator(DataUpdateCoordinator):
         try:
             cap = await client.get_capacity()
         except Exception as err:  # noqa: BLE001 – Login/Netz: nur diesen Poll ueberspringen
-            _LOGGER.warning("Studio-Auslastung: Netpulse-Abruf fehlgeschlagen: %s", err)
+            if getattr(err, "status", None) in (401, 403):  # Auth abgelehnt -> nicht hammern
+                self._np_paused = True
+                _LOGGER.warning("Studio-Auslastung: Login abgelehnt (%s). Pausiert bis zum "
+                                "Neuladen der Integration (Lockout-Schutz).", err)
+            else:
+                _LOGGER.warning("Studio-Auslastung: Netpulse-Abruf fehlgeschlagen: %s", err)
             return None
         if cap is None:
             _LOGGER.debug("Studio-Auslastung: Studio liefert kein capacity-Objekt")

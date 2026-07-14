@@ -39,10 +39,10 @@ NP_COMPANY = "/np/companies/%s"   # Company-Details des Heimstudios inkl. capaci
 # Header-Werte aus HeadersInterceptor (App v1.2, versionCode 110).
 NP_API_VERSION = "1.5"
 NP_APP_VERSION = "1.2"
-# ponytail: applicationName ist deskriptiv (Server keyed auf das eingeloggte Konto,
-# nicht auf den UA-String). Bei 4xx im Login hier zuerst nachziehen.
+# applicationName = brandFullName-Ressource (SevenStark). Ueber diesen Wert loest
+# Netpulse ggf. den eGym-Mandanten auf -> bei 401 im Login hier zuerst nachziehen.
 NP_USER_AGENT = ("clientType=MOBILE_DEVICE; devicePlatform=ANDROID; deviceUid={uuid}; "
-                 "applicationName=sevenstark; applicationVersion=1.2; "
+                 "applicationName=SevenStark; applicationVersion=1.2; "
                  "applicationVersionCode=110")
 
 # gymLocationId (UUID) wird aus partnerLocationId via mappings aufgeloest und gecacht.

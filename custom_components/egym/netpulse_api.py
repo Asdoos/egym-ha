@@ -10,6 +10,7 @@ Aus dem APK (com.netpulse.mobile.sevenstark) per jadx verifiziert:
 """
 from __future__ import annotations
 
+import json
 import logging
 
 import aiohttp
@@ -51,8 +52,11 @@ class NetpulseCapacityClient:
             data={"username": self._email, "password": self._password},
             headers=self._headers(),
         ) as r:
-            r.raise_for_status()
-            data = await r.json()
+            body = await r.text()
+            if r.status != 200:
+                # Body enthaelt "cause"/"message" (NoSuchUser, external service, locked, ...)
+                raise NetpulseError(f"Login HTTP {r.status}: {body[:300]}", status=r.status)
+            data = json.loads(body)
             # Set-Cookie kann mehrfach vorkommen; nur JSESSIONID interessiert.
             cookie = None
             for raw in r.headers.getall("Set-Cookie", []):
@@ -80,4 +84,8 @@ class NetpulseCapacityClient:
 
 
 class NetpulseError(Exception):
-    """Unerwartete Netpulse-Antwort (Login ok, aber Daten fehlen)."""
+    """Netpulse-Fehler. status gesetzt bei HTTP-Fehlern (401/403 = Auth abgelehnt)."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
