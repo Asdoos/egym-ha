@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "eGym / Wellpass Login",
+        "description": "Melde dich mit deinen eGym-ID-Zugangsdaten an (E-Mail + Passwort).",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "studio": {
+        "title": "Studio auswählen",
+        "description": "Wähle dein Studio (⭐ = dein meistbesuchtes; weitere sind Studios in der Nähe deines Home-Assistant-Standorts).",
+        "data": {
+          "studio_id": "Studio"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-Mail oder Passwort ungültig.",
+      "cannot_connect": "Verbindung zur eGym-API fehlgeschlagen."
+    },
+    "abort": {
+      "already_configured": "Dieser Account ist bereits eingerichtet."
+    }
+  }
+}
