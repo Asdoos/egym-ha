@@ -17,7 +17,7 @@
           "netpulse_host": "Netpulse-Host (für Studio-Auslastung)"
         },
         "data_description": {
-          "netpulse_host": "Marken-Host für den Auslastungs-Sensor. Standard passt für 7stark; andere Marken tragen ihren Host ein (z. B. meinbrand.netpulse.com)."
+          "netpulse_host": "Marken-Host für den Auslastungs-Sensor, automatisch aus deinem Studio erkannt. Leer = ohne Auslastungs-Sensor. Bei Bedarf manuell setzen (z. B. meinbrand.netpulse.com)."
         }
       }
     },

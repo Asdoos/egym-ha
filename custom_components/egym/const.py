@@ -34,10 +34,10 @@ EP_MOST_VISITED = "/mwa/api/gym-finder/v1/gyms/most-visited"
 # Login  = POST /np/exerciser/login (Form username+password) -> JSESSIONID + chainUuid.
 # Capacity = GET /np/locations/v1.0/gym-chains/{chainUuid}/location-details
 #            -> [{uuid, utilization:{gymLocationId,totalCapacity,usedCapacity}}]
-CONF_NP_HOST = "netpulse_host"          # im Config-Flow konfigurierbar (pro Brand)
-NP_HOST_DEFAULT = "7stark.netpulse.com"  # Default-Brand; andere Marken tragen ihren ein
+CONF_NP_HOST = "netpulse_host"   # aus Studio-Alias erkannt oder manuell; KEIN Default
 NP_LOGIN = "/np/exerciser/login"
 NP_LOCATION_DETAILS = "/np/locations/v1.0/gym-chains/%s/location-details"
+NP_BRAND_DESC = "/np/brand/description"   # unauth; chainAlias == Host-Subdomain
 
 # Header aus dem Mitschnitt (App v1.2, versionCode 110; deviceUid war leer).
 NP_API_VERSION = "1.5"

@@ -10,9 +10,8 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import AuthError, EgymApi
-from .const import (
-    CONF_NP_HOST, CONF_STUDIO_ID, CONF_STUDIO_NAME, DOMAIN, NP_HOST_DEFAULT,
-)
+from .const import CONF_NP_HOST, CONF_STUDIO_ID, CONF_STUDIO_NAME, DOMAIN
+from .netpulse_api import detect_host
 
 LOGIN_SCHEMA = vol.Schema({vol.Required(CONF_EMAIL): str, vol.Required(CONF_PASSWORD): str})
 
@@ -55,14 +54,15 @@ class EgymConfigFlow(ConfigFlow, domain=DOMAIN):
                 title=self._studios.get(user_input[CONF_STUDIO_ID], self._data[CONF_EMAIL]),
                 data={**self._data, CONF_STUDIO_ID: user_input[CONF_STUDIO_ID],
                       CONF_STUDIO_NAME: self._studios.get(user_input[CONF_STUDIO_ID], ""),
-                      CONF_NP_HOST: user_input.get(CONF_NP_HOST, NP_HOST_DEFAULT).strip()},
+                      CONF_NP_HOST: user_input.get(CONF_NP_HOST, "").strip()},
             )
 
         # Optionen sammeln: Heimstudio zuerst, dann Umkreis um HA-Standort
         self._studios = {}
         home = await self._api.get_most_visited_gym()
+        home_alias = home.get("alias") if home else None
         if home and home.get("gymUUID"):
-            self._studios[home["gymUUID"]] = f"⭐ {home.get('alias') or home['gymUUID']}"
+            self._studios[home["gymUUID"]] = f"⭐ {home_alias or home['gymUUID']}"
         try:
             gyms = await self._api.search_gyms(self.hass.config.latitude,
                                                self.hass.config.longitude)
@@ -73,10 +73,15 @@ class EgymConfigFlow(ConfigFlow, domain=DOMAIN):
             if gid and gid not in self._studios:
                 self._studios[gid] = g.get("name") or gid
 
+        # Netpulse-Host aus dem Studio-Alias ableiten + validieren. Kein Default:
+        # scheitert die Erkennung, bleibt das Feld leer -> Auslastungs-Sensor inaktiv,
+        # bis der Host manuell eingetragen wird.
+        np_host = await detect_host(self._api.session, home_alias) or ""
+
         studio_field = str if not self._studios else vol.In(self._studios)
         schema = vol.Schema({
             vol.Required(CONF_STUDIO_ID): studio_field,
-            # Netpulse-Host der Marke (Auslastungs-Sensor). Andere Brands: hier anpassen.
-            vol.Optional(CONF_NP_HOST, default=NP_HOST_DEFAULT): str,
+            # Auto-erkannt (Alias -> {alias}.netpulse.com); leer lassen = ohne Auslastung.
+            vol.Optional(CONF_NP_HOST, default=np_host): str,
         })
         return self.async_show_form(step_id="studio", data_schema=schema)

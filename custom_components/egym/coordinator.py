@@ -13,7 +13,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
 from .api import EgymApi
-from .const import CONF_NP_HOST, CONF_STUDIO_ID, DOMAIN, NP_HOST_DEFAULT, SCAN_INTERVAL
+from .const import CONF_NP_HOST, CONF_STUDIO_ID, DOMAIN, SCAN_INTERVAL
 from .netpulse_api import NetpulseCapacityClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,12 +62,13 @@ class EgymCoordinator(DataUpdateCoordinator):
 
     async def _capacity(self) -> dict | None:
         """Netpulse Studio-Auslastung. Auth-Ablehnung pausiert bis Reload."""
-        if self._np_paused:
+        host = self.entry.data.get(CONF_NP_HOST)
+        if self._np_paused or not host:  # kein Host -> Feature aus (kein Default)
             return None
         client = NetpulseCapacityClient(
             self.api.session,
             self.entry.data[CONF_EMAIL], self.entry.data[CONF_PASSWORD],
-            host=self.entry.data.get(CONF_NP_HOST) or NP_HOST_DEFAULT,
+            host=host,
         )
         try:
             cap = await client.get_capacity()

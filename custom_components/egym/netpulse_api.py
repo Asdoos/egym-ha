@@ -18,11 +18,41 @@ import logging
 import aiohttp
 
 from .const import (
-    NP_LOGIN, NP_LOCATION_DETAILS,
+    NP_LOGIN, NP_LOCATION_DETAILS, NP_BRAND_DESC,
     NP_API_VERSION, NP_APP_VERSION, NP_USER_AGENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _headers_base() -> dict[str, str]:
+    return {
+        "Accept": "application/json",
+        "X-NP-API-Version": NP_API_VERSION,
+        "X-NP-APP-Version": NP_APP_VERSION,
+        "X-NP-User-Agent": NP_USER_AGENT,
+    }
+
+
+async def detect_host(session: aiohttp.ClientSession, alias: str | None) -> str | None:
+    """Leitet den Brand-Host aus dem eGym-Studio-Alias ab und validiert ihn.
+
+    Netpulse-Host = {chainAlias}.netpulse.com, und chainAlias == eGym-Studio-Alias
+    (verifiziert fuer 7stark). Prueft per unauth GET /np/brand/description, dass der
+    Host existiert und derselbe Alias zurueckkommt. None, wenn nicht ableitbar.
+    """
+    slug = "".join(c for c in (alias or "").lower() if c.isalnum())
+    if not slug:
+        return None
+    host = f"{slug}.netpulse.com"
+    try:
+        async with session.get(f"https://{host}{NP_BRAND_DESC}",
+                               headers=_headers_base()) as r:
+            if r.status == 200 and (await r.json()).get("chainAlias"):
+                return host
+    except Exception as err:  # noqa: BLE001 – Netz/DNS: nicht ableitbar
+        _LOGGER.debug("Netpulse-Host-Erkennung fuer %r fehlgeschlagen: %s", host, err)
+    return None
 
 
 class NetpulseCapacityClient:
@@ -36,12 +66,7 @@ class NetpulseCapacityClient:
         self._base = f"https://{host}"  # brand-spezifischer Netpulse-Host
 
     def _headers(self, cookie: str | None = None) -> dict[str, str]:
-        h = {
-            "Accept": "application/json",
-            "X-NP-API-Version": NP_API_VERSION,
-            "X-NP-APP-Version": NP_APP_VERSION,
-            "X-NP-User-Agent": NP_USER_AGENT,
-        }
+        h = _headers_base()
         if cookie:
             h["Cookie"] = cookie
         return h
