@@ -80,8 +80,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry,
         entities.append(EgymImbalanceSensor(coordinator, entry))
     if coordinator.data.get("membership"):
         entities.append(EgymMembershipSensor(coordinator, entry))
-    if coordinator.data.get("capacity"):
-        entities.append(EgymCapacitySensor(coordinator, entry))
+    # Immer anlegen: sonst verschwindet der Sensor dauerhaft, wenn der erste
+    # Netpulse-Abruf (Login/Studio ohne capacity) scheitert. Ohne Daten -> "unbekannt".
+    entities.append(EgymCapacitySensor(coordinator, entry))
     add_entities(entities)
 
 

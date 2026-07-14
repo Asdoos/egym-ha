@@ -63,7 +63,14 @@ class EgymCoordinator(DataUpdateCoordinator):
             self.entry.data[CONF_EMAIL], self.entry.data[CONF_PASSWORD],
             device_uuid=self.entry.entry_id,
         )
-        return await self._optional(client.get_capacity())
+        try:
+            cap = await client.get_capacity()
+        except Exception as err:  # noqa: BLE001 – Login/Netz: nur diesen Poll ueberspringen
+            _LOGGER.warning("Studio-Auslastung: Netpulse-Abruf fehlgeschlagen: %s", err)
+            return None
+        if cap is None:
+            _LOGGER.debug("Studio-Auslastung: Studio liefert kein capacity-Objekt")
+        return cap
 
     async def _optional(self, coro):
         """Wrapper fuer nicht-kritische Endpunkte -> None statt UpdateFailed."""
