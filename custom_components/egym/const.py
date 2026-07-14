@@ -29,20 +29,21 @@ EP_CHECKIN_GYMS = "/mwa/api/checkin/v1/gyms"
 EP_MOST_VISITED = "/mwa/api/gym-finder/v1/gyms/most-visited"
 
 # --- Netpulse Live-Capacity (Studio-Auslastung) -------------------------------
-# Aus dem APK (com.netpulse.mobile.sevenstark) per jadx verifiziert, siehe
-# netpulse_api.py. Login = POST /np/exerciser/login (Form username+password),
-# Capacity = GET /np/companies/{homeClubUuid} -> capacity{usedCapacity,totalCapacity}.
-NP_BASE = "https://api.netpulse.com"
+# Per HTTPS-Mitschnitt der App verifiziert (2026-07-14). WICHTIG: brand-spezifischer
+# Host (nicht api.netpulse.com) - sonst 401 "StandardizedFlows not enabled".
+# Login  = POST /np/exerciser/login (Form username+password) -> JSESSIONID + chainUuid.
+# Capacity = GET /np/locations/v1.0/gym-chains/{chainUuid}/location-details
+#            -> [{uuid, utilization:{gymLocationId,totalCapacity,usedCapacity}}]
+CONF_NP_HOST = "netpulse_host"          # im Config-Flow konfigurierbar (pro Brand)
+NP_HOST_DEFAULT = "7stark.netpulse.com"  # Default-Brand; andere Marken tragen ihren ein
 NP_LOGIN = "/np/exerciser/login"
-NP_COMPANY = "/np/companies/%s"   # Company-Details des Heimstudios inkl. capacity
+NP_LOCATION_DETAILS = "/np/locations/v1.0/gym-chains/%s/location-details"
 
-# Header-Werte aus HeadersInterceptor (App v1.2, versionCode 110).
+# Header aus dem Mitschnitt (App v1.2, versionCode 110; deviceUid war leer).
 NP_API_VERSION = "1.5"
 NP_APP_VERSION = "1.2"
-# applicationName = brandFullName-Ressource (SevenStark). Ueber diesen Wert loest
-# Netpulse ggf. den eGym-Mandanten auf -> bei 401 im Login hier zuerst nachziehen.
-NP_USER_AGENT = ("clientType=MOBILE_DEVICE; devicePlatform=ANDROID; deviceUid={uuid}; "
-                 "applicationName=SevenStark; applicationVersion=1.2; "
+NP_USER_AGENT = ("clientType=MOBILE_DEVICE; devicePlatform=ANDROID; deviceUid=; "
+                 "applicationName=7stark; applicationVersion=1.2; "
                  "applicationVersionCode=110")
 
 # gymLocationId (UUID) wird aus partnerLocationId via mappings aufgeloest und gecacht.

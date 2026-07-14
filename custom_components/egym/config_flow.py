@@ -10,7 +10,9 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import AuthError, EgymApi
-from .const import CONF_STUDIO_ID, CONF_STUDIO_NAME, DOMAIN
+from .const import (
+    CONF_NP_HOST, CONF_STUDIO_ID, CONF_STUDIO_NAME, DOMAIN, NP_HOST_DEFAULT,
+)
 
 LOGIN_SCHEMA = vol.Schema({vol.Required(CONF_EMAIL): str, vol.Required(CONF_PASSWORD): str})
 
@@ -52,7 +54,8 @@ class EgymConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=self._studios.get(user_input[CONF_STUDIO_ID], self._data[CONF_EMAIL]),
                 data={**self._data, CONF_STUDIO_ID: user_input[CONF_STUDIO_ID],
-                      CONF_STUDIO_NAME: self._studios.get(user_input[CONF_STUDIO_ID], "")},
+                      CONF_STUDIO_NAME: self._studios.get(user_input[CONF_STUDIO_ID], ""),
+                      CONF_NP_HOST: user_input.get(CONF_NP_HOST, NP_HOST_DEFAULT).strip()},
             )
 
         # Optionen sammeln: Heimstudio zuerst, dann Umkreis um HA-Standort
@@ -70,8 +73,10 @@ class EgymConfigFlow(ConfigFlow, domain=DOMAIN):
             if gid and gid not in self._studios:
                 self._studios[gid] = g.get("name") or gid
 
-        if not self._studios:  # Fallback: freie Eingabe der Studio-ID
-            schema = vol.Schema({vol.Required(CONF_STUDIO_ID): str})
-        else:
-            schema = vol.Schema({vol.Required(CONF_STUDIO_ID): vol.In(self._studios)})
+        studio_field = str if not self._studios else vol.In(self._studios)
+        schema = vol.Schema({
+            vol.Required(CONF_STUDIO_ID): studio_field,
+            # Netpulse-Host der Marke (Auslastungs-Sensor). Andere Brands: hier anpassen.
+            vol.Optional(CONF_NP_HOST, default=NP_HOST_DEFAULT): str,
+        })
         return self.async_show_form(step_id="studio", data_schema=schema)

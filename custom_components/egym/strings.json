@@ -13,7 +13,11 @@
         "title": "Studio auswählen",
         "description": "Wähle dein Studio (⭐ = dein meistbesuchtes; weitere sind Studios in der Nähe deines Home-Assistant-Standorts).",
         "data": {
-          "studio_id": "Studio"
+          "studio_id": "Studio",
+          "netpulse_host": "Netpulse-Host (für Studio-Auslastung)"
+        },
+        "data_description": {
+          "netpulse_host": "Marken-Host für den Auslastungs-Sensor. Standard passt für 7stark; andere Marken tragen ihren Host ein (z. B. meinbrand.netpulse.com)."
         }
       }
     },
