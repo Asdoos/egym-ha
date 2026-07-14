@@ -80,6 +80,7 @@ class NetpulseClient:
         self._s = session
         self._email = email
         self._password = password
+        self._host = host
         self._base = f"https://{host}"  # brand-spezifischer Netpulse-Host
 
     def _headers(self, cookie: str | None = None) -> dict[str, str]:
@@ -90,6 +91,13 @@ class NetpulseClient:
 
     async def _login(self) -> tuple[str, str, str, str]:
         """(uuid, chainUuid, homeClubUuid, JSESSIONID-Cookie). Wirft bei !=200/Netzfehler."""
+        # Alte Session aus dem GETEILTEN aiohttp-CookieJar entfernen: sonst schickt aiohttp
+        # beim naechsten Login die alte JSESSIONID mit -> Server gibt KEIN neues Set-Cookie
+        # -> Cookie fehlt -> Auslastung ab dem 2. Poll "unbekannt".
+        try:
+            self._s.cookie_jar.clear_domain(self._host)
+        except Exception:  # noqa: BLE001 – aeltere aiohttp ohne clear_domain: unkritisch
+            pass
         # data=... -> FormBody (application/x-www-form-urlencoded), wie die App.
         async with self._s.post(
             self._base + NP_LOGIN,
