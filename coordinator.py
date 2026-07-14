@@ -13,8 +13,8 @@ from homeassistant.util import dt as dt_util
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
 from .api import EgymApi
-from .const import CONF_NP_DISABLED, CONF_STUDIO_ID, DOMAIN, SCAN_INTERVAL
-from .netpulse_api import NetpulseAuthRejected, NetpulseCapacityClient
+from .const import CONF_STUDIO_ID, DOMAIN, SCAN_INTERVAL
+from .netpulse_api import NetpulseCapacityClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,30 +57,13 @@ class EgymCoordinator(DataUpdateCoordinator):
                 "capacity": capacity}
 
     async def _capacity(self) -> dict | None:
-        """Netpulse Live-Auslastung: genau EIN Versuch, dann self-disable.
-
-        ponytail: 4xx = Rekonstruktion (brandName/UA/…) falsch -> dauerhaft aus, damit
-        kein stuendlicher Login das Konto sperrt (§13). Transiente Fehler nur diesen Poll
-        ueberspringen. Reaktivieren = Integration neu einrichten (Flag liegt in entry.data).
-        """
-        if self.entry.data.get(CONF_NP_DISABLED):
-            return None
+        """Netpulse Studio-Auslastung. Optional: Fehler kippen nur diesen Poll."""
         client = NetpulseCapacityClient(
-            self.api.session,  # gleiche aiohttp-Session -> JSESSIONID-Cookie traegt mit
+            self.api.session,
             self.entry.data[CONF_EMAIL], self.entry.data[CONF_PASSWORD],
             device_uuid=self.entry.entry_id,
         )
-        try:
-            return await client.get_capacity()
-        except NetpulseAuthRejected as err:
-            _LOGGER.warning("Netpulse Live-Auslastung deaktiviert (Login abgelehnt: %s). "
-                            "Reaktivieren: Integration neu einrichten.", err)
-            self.hass.config_entries.async_update_entry(
-                self.entry, data={**self.entry.data, CONF_NP_DISABLED: True})
-            return None
-        except Exception as err:  # noqa: BLE001 – transient, nicht abschalten
-            _LOGGER.debug("Netpulse-Capacity transient fehlgeschlagen: %s", err)
-            return None
+        return await self._optional(client.get_capacity())
 
     async def _optional(self, coro):
         """Wrapper fuer nicht-kritische Endpunkte -> None statt UpdateFailed."""

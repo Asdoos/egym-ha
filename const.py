@@ -29,26 +29,21 @@ EP_CHECKIN_GYMS = "/mwa/api/checkin/v1/gyms"
 EP_MOST_VISITED = "/mwa/api/gym-finder/v1/gyms/most-visited"
 
 # --- Netpulse Live-Capacity (Studio-Auslastung) -------------------------------
-# Statisch aus dem APK rekonstruiert (Dex): api.netpulse.com, ClubCapacity liegt
-# im Company-Objekt (DB-Spalte `companies.capacity`). Login ist brand-gated und
-# hat bei Blind-Versuchen schon eine Konto-Sperre ausgeloest -> genau EIN Versuch,
-# danach self-disable (siehe coordinator + netpulse_api). Details: Architektur §13.
+# Aus dem APK (com.netpulse.mobile.sevenstark) per jadx verifiziert, siehe
+# netpulse_api.py. Login = POST /np/exerciser/login (Form username+password),
+# Capacity = GET /np/companies/{homeClubUuid} -> capacity{usedCapacity,totalCapacity}.
 NP_BASE = "https://api.netpulse.com"
-NP_LOGIN = "/np/exerciser/login"      # klassischer Flow
-NP_CLUB = "/np/exerciser/company/favorite"  # Heimstudio-Company inkl. capacity
-# Live-Probing 2026-07-14: /np/exerciser/club/ -> 404 (falsch);
-# /np/exerciser/company/favorite -> 403 (existiert, braucht Auth) = richtiger Kandidat.
-# ponytail: Header-/Body-Werte sind aus dem Dex geraten (clientType/brandName bestaetigte
-# Feld-NAMEN, Werte nicht). Falscher Wert -> 4xx -> self-disable, kein Lock. Verifizieren
-# liesse sich nur per 1 echtem Login-Mitschnitt (bewusst ohne Proxy gebaut).
-NP_CLIENT_TYPE = "ANDROID"
-# ponytail: 7stark-spezifische Platzhalter fuer das (aktuell blockierte, studio-
-# spezifische) Capacity-Feature. Generisch erst relevant, wenn der eGym->Netpulse-
-# Handshake gemappt ist (Architektur §13). Bis dahin nur Beispielwerte.
-NP_BRAND_NAMES = ("sevenstark", "7stark")
-NP_API_VERSION = "2.0"
-NP_APP_VERSION = "7starkApp/1.2"
-CONF_NP_DISABLED = "netpulse_disabled"
+NP_LOGIN = "/np/exerciser/login"
+NP_COMPANY = "/np/companies/%s"   # Company-Details des Heimstudios inkl. capacity
+
+# Header-Werte aus HeadersInterceptor (App v1.2, versionCode 110).
+NP_API_VERSION = "1.5"
+NP_APP_VERSION = "1.2"
+# ponytail: applicationName ist deskriptiv (Server keyed auf das eingeloggte Konto,
+# nicht auf den UA-String). Bei 4xx im Login hier zuerst nachziehen.
+NP_USER_AGENT = ("clientType=MOBILE_DEVICE; devicePlatform=ANDROID; deviceUid={uuid}; "
+                 "applicationName=sevenstark; applicationVersion=1.2; "
+                 "applicationVersionCode=110")
 
 # gymLocationId (UUID) wird aus partnerLocationId via mappings aufgeloest und gecacht.
 LOCALE = "de_DE"           # Query-Param; Namens-Key im JSON ist LOCALE.split("_")[0] = "de"

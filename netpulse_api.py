@@ -1,22 +1,12 @@
-"""Netpulse-Client fuer Live Capacity (Studio-Auslastung).
+"""Netpulse-Client fuer die Studio-Auslastung (Live Capacity).
 
-Ohne Proxy statisch aus dem APK rekonstruiert (Dex-Analyse):
-- Auslastung = `ClubCapacity` im Company-Objekt (api.netpulse.com), nicht in eGym-MWA.
-- Felder (bestaetigt im Dex): capacityInPercent, currentCapacity, maxCapacity,
-  usedCapacity, waitlistCapacity, webCapacity, totalCapacity.
-
-WARNUNG (Architektur §13): Blind-Login-Versuche haben eine Konto-Sperre ausgeloest.
-Deshalb macht der Coordinator GENAU EINEN Versuch und deaktiviert bei Ablehnung (4xx)
-dauerhaft (self-disable).
-
-BEKANNTE LUECKE (Live-Probing 2026-07-14): Fuer eGym-Brands wie 7stark bietet Netpulse
-KEINEN Username/Passwort-Login an -> POST /np/exerciser/login antwortet mit
-"StandardizedFlows not enabled" (form) bzw. "Required parameters are missing" (json),
-BEVOR das Passwort geprueft wird. Die Netpulse-Session der App kommt ueber eGym-SSO
-(passwordless / magic-link, siehe §4.2), NICHT ueber diesen Login. Der Code unten ist
-daher lauffaehig, wird aber real 4xx -> self-disable liefern, bis der eGym->Netpulse-
-Handshake einmal mitgeschnitten (Proxy) und hier ersetzt ist. ponytail: bewusst so
-belassen statt eGym-Bridge blind zu raten - unverifizierbar ohne Mitschnitt.
+Aus dem APK (com.netpulse.mobile.sevenstark) per jadx verifiziert:
+- Login: POST /np/exerciser/login, FORM-encoded username+password (kein JSON!).
+  Antwort-JSON enthaelt homeClubUuid; Session kommt per Set-Cookie (JSESSIONID).
+- Capacity: GET /np/companies/{homeClubUuid} -> Company mit
+  capacity:{totalCapacity, usedCapacity}. Prozent wie in der App:
+  round(usedCapacity / totalCapacity * 100)  (Company.getCapacityInPercent()).
+- Header: X-NP-API-Version 1.5 + X-NP-APP-Version + X-NP-User-Agent (HeadersInterceptor).
 """
 from __future__ import annotations
 
@@ -25,23 +15,15 @@ import logging
 import aiohttp
 
 from .const import (
-    NP_BASE, NP_LOGIN, NP_CLUB,
-    NP_CLIENT_TYPE, NP_BRAND_NAMES, NP_API_VERSION, NP_APP_VERSION,
+    NP_BASE, NP_LOGIN, NP_COMPANY,
+    NP_API_VERSION, NP_APP_VERSION, NP_USER_AGENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class NetpulseAuthRejected(Exception):
-    """Server hat den Login abgelehnt (4xx) -> Rekonstruktion falsch, self-disable."""
-
-
 class NetpulseCapacityClient:
-    """Loggt sich einmalig bei Netpulse ein und liest die Club-Auslastung.
-
-    Kein Auto-Retry, kein Auto-Refresh: der Coordinator ruft hoechstens 1x pro Poll
-    und schaltet bei NetpulseAuthRejected dauerhaft ab.
-    """
+    """Loggt sich bei Netpulse ein und liest die Auslastung des Heimstudios."""
 
     def __init__(self, session: aiohttp.ClientSession, email: str, password: str,
                  device_uuid: str) -> None:
@@ -50,73 +32,52 @@ class NetpulseCapacityClient:
         self._password = password
         self._device_uuid = device_uuid
 
-    def _headers(self) -> dict[str, str]:
-        # ponytail: X-NP-User-Agent wird in der App zur Laufzeit gebaut (kein Literal
-        # im Dex). Plausibler Ersatz; war in §13 NICHT der Blocker (Login kam durch,
-        # scheiterte an der Brand-Policy). Falsch -> hoechstens 4xx -> self-disable.
-        return {
+    def _headers(self, cookie: str | None = None) -> dict[str, str]:
+        h = {
+            "Accept": "application/json",
             "X-NP-API-Version": NP_API_VERSION,
             "X-NP-APP-Version": NP_APP_VERSION,
-            "X-NP-User-Agent": f"{NP_APP_VERSION} (Linux; Android 14) sevenstark",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
+            "X-NP-User-Agent": NP_USER_AGENT.format(uuid=self._device_uuid),
         }
+        if cookie:
+            h["Cookie"] = cookie
+        return h
 
-    async def _login(self) -> None:
-        # Feld-NAMEN im Dex bestaetigt; brandName/clientType-WERTE geraten (const.py).
-        # Beide Brand-Keys nacheinander; erst wenn ALLE 4xx liefern -> self-disable.
-        last = None
-        for brand in NP_BRAND_NAMES:
-            body = {
-                "username": self._email,
-                "password": self._password,
-                "clientType": NP_CLIENT_TYPE,
-                "deviceUuid": self._device_uuid,
-                "brandName": brand,
-            }
-            async with self._s.post(NP_BASE + NP_LOGIN, json=body,
-                                    headers=self._headers()) as r:
-                if 400 <= r.status < 500:
-                    last = f"{r.status} (brand={brand}): {(await r.text())[:150]}"
-                    continue
-                r.raise_for_status()
-                return  # Session laeuft ueber den JSESSIONID-Cookie (aiohttp CookieJar) mit.
-        raise NetpulseAuthRejected(last or "alle brandName-Varianten abgelehnt")
-
-    async def get_capacity(self) -> dict | None:
-        """{'percent','current','max','used','waitlist','web'} oder None.
-
-        Wirft NetpulseAuthRejected nur bei 4xx im Login (-> Coordinator disabled).
-        Transiente Fehler (Netz/5xx) propagieren als normale Exception (-> None-Poll).
-        """
-        await self._login()
-        async with self._s.get(NP_BASE + NP_CLUB, headers=self._headers()) as r:
+    async def _login(self) -> tuple[str, str]:
+        """Gibt (homeClubUuid, jsessionid-Cookie) zurueck. Wirft bei 4xx/Netzfehler."""
+        # data=... -> FormBody (application/x-www-form-urlencoded), wie die App.
+        async with self._s.post(
+            NP_BASE + NP_LOGIN,
+            data={"username": self._email, "password": self._password},
+            headers=self._headers(),
+        ) as r:
             r.raise_for_status()
             data = await r.json()
+            # Set-Cookie kann mehrfach vorkommen; nur JSESSIONID interessiert.
+            cookie = None
+            for raw in r.headers.getall("Set-Cookie", []):
+                if raw.startswith("JSESSIONID="):
+                    cookie = raw.split(";", 1)[0]  # "JSESSIONID=<wert>"
+                    break
+        home = data.get("homeClubUuid")
+        if not home or not cookie:
+            raise NetpulseError(f"Login ok, aber homeClubUuid/Session fehlt (home={home!r})")
+        return home, cookie
 
-        cap = _extract_capacity(data)
-        if not cap:
+    async def get_capacity(self) -> dict | None:
+        """{'percent','used','total'} oder None (kein capacity-Objekt am Studio)."""
+        home, cookie = await self._login()
+        async with self._s.get(NP_BASE + NP_COMPANY % home,
+                               headers=self._headers(cookie)) as r:
+            r.raise_for_status()
+            company = await r.json()
+
+        cap = company.get("capacity") or {}
+        used, total = cap.get("usedCapacity"), cap.get("totalCapacity")
+        if used is None or not total:  # not total -> auch 0 abfangen (Div/0)
             return None
-        return {
-            "percent": cap.get("capacityInPercent"),
-            "current": cap.get("currentCapacity") or cap.get("usedCapacity"),
-            "max": cap.get("maxCapacity") or cap.get("totalCapacity"),
-            "used": cap.get("usedCapacity"),
-            "waitlist": cap.get("waitlistCapacity"),
-            "web": cap.get("webCapacity"),
-        }
+        return {"percent": round(used / total * 100), "used": used, "total": total}
 
 
-def _extract_capacity(data) -> dict | None:
-    """Findet das ClubCapacity-Objekt egal ob /club/ ein Company oder eine Liste liefert."""
-    if isinstance(data, list):
-        for item in data:
-            cap = _extract_capacity(item)
-            if cap:
-                return cap
-        return None
-    if isinstance(data, dict):
-        cap = data.get("capacity") or data.get("clubCapacity")
-        if isinstance(cap, dict) and cap.get("capacityInPercent") is not None:
-            return cap
-    return None
+class NetpulseError(Exception):
+    """Unerwartete Netpulse-Antwort (Login ok, aber Daten fehlen)."""

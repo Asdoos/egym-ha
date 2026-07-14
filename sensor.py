@@ -231,8 +231,7 @@ class EgymCapacitySensor(_Base):
     @property
     def extra_state_attributes(self):
         c = self.coordinator.data.get("capacity") or {}
-        return {"current": c.get("current"), "max": c.get("max"),
-                "used": c.get("used"), "waitlist": c.get("waitlist"), "web": c.get("web")}
+        return {"used": c.get("used"), "total": c.get("total")}
 
 
 class EgymMembershipSensor(_Base):
