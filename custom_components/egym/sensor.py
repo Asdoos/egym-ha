@@ -66,7 +66,9 @@ METRIC_SENSORS: dict[str, tuple[str, str, str | None, str]] = {
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry,
                             add_entities: AddEntitiesCallback) -> None:
-    coordinator: EgymCoordinator = hass.data[DOMAIN][entry.entry_id]
+    store = hass.data[DOMAIN][entry.entry_id]
+    coordinator = store["egym"]
+    np = store["netpulse"]  # eigener 5-Min-Coordinator fuer Netpulse-Livedaten
     entities: list[SensorEntity] = [
         EgymBioAgeSensor(coordinator, entry, *cfg) for cfg in BIOAGE_SENSORS
     ]
@@ -80,19 +82,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry,
         entities.append(EgymImbalanceSensor(coordinator, entry))
     if coordinator.data.get("membership"):
         entities.append(EgymMembershipSensor(coordinator, entry))
-    # Immer anlegen: sonst verschwindet der Sensor dauerhaft, wenn der erste
-    # Netpulse-Abruf (Login/Studio ohne capacity) scheitert. Ohne Daten -> "unbekannt".
-    entities.append(EgymCapacitySensor(coordinator, entry))
-    # Weitere Netpulse-Daten nur, wenn der Login sie geliefert hat.
-    if coordinator.data.get("activity"):
-        entities.append(EgymActivityLevelSensor(coordinator, entry))
-        entities.append(EgymActivityPointsSensor(coordinator, entry))
-    if coordinator.data.get("challenges") is not None:
-        entities.append(EgymChallengesSensor(coordinator, entry))
-    if coordinator.data.get("classes"):
-        entities.append(EgymNextClassSensor(coordinator, entry))
-    if coordinator.data.get("topics"):
-        entities.append(EgymClubInfoSensor(coordinator, entry))
+    # Netpulse-Sensoren haengen am 5-Min-Coordinator (np).
+    # Auslastung immer anlegen: sonst verschwindet der Sensor dauerhaft, wenn der erste
+    # Abruf (Login/Studio ohne capacity) scheitert. Ohne Daten -> "unbekannt".
+    entities.append(EgymCapacitySensor(np, entry))
+    if (np.data or {}).get("activity"):
+        entities.append(EgymActivityLevelSensor(np, entry))
+        entities.append(EgymActivityPointsSensor(np, entry))
+    if (np.data or {}).get("challenges") is not None:
+        entities.append(EgymChallengesSensor(np, entry))
+    if (np.data or {}).get("classes"):
+        entities.append(EgymNextClassSensor(np, entry))
+    if (np.data or {}).get("topics"):
+        entities.append(EgymClubInfoSensor(np, entry))
     add_entities(entities)
 
 

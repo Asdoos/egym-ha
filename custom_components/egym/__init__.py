@@ -8,7 +8,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import EgymApi
 from .const import DOMAIN
-from .coordinator import EgymCoordinator
+from .coordinator import EgymCoordinator, NetpulseCoordinator
 
 PLATFORMS = [Platform.SENSOR]
 
@@ -24,7 +24,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = EgymCoordinator(hass, api, entry)
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    # Netpulse teilt sich die (bereits authentifizierte) eGym-Session, laeuft aber im
+    # 5-Min-Takt. Optional -> async_refresh (wirft nicht), blockiert Setup nicht.
+    netpulse = NetpulseCoordinator(hass, api, entry)
+    await netpulse.async_refresh()
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        "egym": coordinator, "netpulse": netpulse,
+    }
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

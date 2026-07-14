@@ -60,4 +60,5 @@ HISTORY_START = "2015-01-01T00:00:00Z"   # weit genug zurueck -> gesamte Histori
 
 # Messwerte aendern sich nur nach einem Studiobesuch -> stuendlich reicht dick.
 # ponytail: 1h fix, per Options-Flow konfigurierbar machen wenn jemand es braucht.
-SCAN_INTERVAL = timedelta(hours=1)
+SCAN_INTERVAL = timedelta(hours=1)      # eGym-Messwerte (aendern sich nur nach Studiobesuch)
+NP_SCAN_INTERVAL = timedelta(minutes=5)  # Netpulse Live-Daten (Auslastung u. a.)

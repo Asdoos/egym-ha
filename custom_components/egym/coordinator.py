@@ -13,23 +13,21 @@ from homeassistant.util import dt as dt_util
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
 from .api import EgymApi
-from .const import CONF_NP_HOST, CONF_STUDIO_ID, DOMAIN, SCAN_INTERVAL
+from .const import (
+    CONF_NP_HOST, CONF_STUDIO_ID, DOMAIN, SCAN_INTERVAL, NP_SCAN_INTERVAL,
+)
 from .netpulse_api import NetpulseClient
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class EgymCoordinator(DataUpdateCoordinator):
-    """Ein Poll/Stunde. data = {profile, bioage, metrics(dict type->value)}."""
+    """eGym-Messwerte, 1 Poll/Stunde (aendern sich nur nach Studiobesuch)."""
 
     def __init__(self, hass: HomeAssistant, api: EgymApi, entry: ConfigEntry) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=SCAN_INTERVAL)
         self.api = api
         self.entry = entry
-        # Pausiert den Netpulse-Login nach einer Auth-Ablehnung (401/403), damit ein
-        # falsch konfiguriertes Passwort nicht stuendlich neu probiert -> Konto-Sperre.
-        # In-memory: Reload/Neustart der Integration hebt die Pause auf.
-        self._np_paused = False
 
     async def _async_update_data(self) -> dict:
         try:
@@ -47,7 +45,6 @@ class EgymCoordinator(DataUpdateCoordinator):
         zone = self.hass.config.time_zone or "UTC"
         imbalances = await self._optional(self.api.get_muscle_imbalances(zone))
         membership = await self._optional(self.api.get_membership())
-        netpulse = await self._netpulse()  # capacity + activity + challenges + classes + topics
 
         # rotierte Tokens persistieren -> Neustart ohne Re-Login
         access, refresh = self.api.tokens
@@ -57,13 +54,36 @@ class EgymCoordinator(DataUpdateCoordinator):
 
         metrics = {m["type"]: m for m in metrics_raw if m.get("value") is not None}
         return {"profile": profile, "bioage": bioage, "metrics": metrics,
-                "workouts": workouts, "imbalances": imbalances, "membership": membership,
-                **netpulse}
+                "workouts": workouts, "imbalances": imbalances, "membership": membership}
 
-    async def _netpulse(self) -> dict:
-        """Alle Netpulse-Daten in einem Login. Auth-Ablehnung pausiert bis Reload."""
+    async def _optional(self, coro):
+        """Wrapper fuer nicht-kritische Endpunkte -> None statt UpdateFailed."""
+        try:
+            return await coro
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Optionaler Endpunkt fehlgeschlagen: %s", err)
+            return None
+
+
+class NetpulseCoordinator(DataUpdateCoordinator):
+    """Netpulse Live-Daten (Auslastung + Activity/Challenges/Kurse/Infos), 5-Min-Takt.
+
+    Getrennt vom eGym-Coordinator, weil die Auslastung sich staendig aendert. Ein Login
+    liefert alle Felder. data = {capacity, activity, challenges, classes, topics} oder {}.
+    """
+
+    def __init__(self, hass: HomeAssistant, api: EgymApi, entry: ConfigEntry) -> None:
+        super().__init__(hass, _LOGGER, name=f"{DOMAIN}_netpulse",
+                         update_interval=NP_SCAN_INTERVAL)
+        self.api = api
+        self.entry = entry
+        # Pausiert den Login nach Auth-Ablehnung (401/403), damit ein falsches Passwort
+        # nicht alle 5 min neu probiert -> Konto-Sperre. In-memory: Reload hebt es auf.
+        self._paused = False
+
+    async def _async_update_data(self) -> dict:
         host = self.entry.data.get(CONF_NP_HOST)
-        if self._np_paused or not host:  # kein Host -> Feature aus (kein Default)
+        if self._paused or not host:  # kein Host -> Feature aus (kein Default)
             return {}
         client = NetpulseClient(
             self.api.session,
@@ -74,17 +94,9 @@ class EgymCoordinator(DataUpdateCoordinator):
             return await client.fetch()
         except Exception as err:  # noqa: BLE001 – Login/Netz: nur diesen Poll ueberspringen
             if getattr(err, "status", None) in (401, 403):  # Auth abgelehnt -> nicht hammern
-                self._np_paused = True
+                self._paused = True
                 _LOGGER.warning("Netpulse: Login abgelehnt (%s). Pausiert bis zum Neuladen "
                                 "der Integration (Lockout-Schutz).", err)
             else:
-                _LOGGER.warning("Netpulse-Abruf fehlgeschlagen: %s", err)
+                _LOGGER.debug("Netpulse-Abruf fehlgeschlagen: %s", err)
             return {}
-
-    async def _optional(self, coro):
-        """Wrapper fuer nicht-kritische Endpunkte -> None statt UpdateFailed."""
-        try:
-            return await coro
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Optionaler Endpunkt fehlgeschlagen: %s", err)
-            return None

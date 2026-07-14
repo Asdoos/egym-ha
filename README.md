@@ -35,7 +35,7 @@ Sensoren ohne hinterlegte Werte (z. B. Kardio, wenn nie gemessen) erscheinen als
 und aktivieren sich automatisch, sobald im Studio Werte erfasst werden.
 
 ## Technik
-- `iot_class: cloud_polling`, **1 Abruf/Stunde** (Messwerte ändern sich nur nach Studiobesuch).
+- `iot_class: cloud_polling`. eGym-Messwerte **1×/Stunde** (ändern sich nur nach Studiobesuch); Netpulse-Livedaten (Auslastung etc.) **alle 5 min** über einen separaten Coordinator.
 - Auth: eGym-MWA `authenticate` (Firebase-Token, 1 h), automatischer Refresh bei 401.
 - Keine externen Python-Abhängigkeiten (HA bringt `aiohttp` mit).
 - Kein Tracking/Telemetrie — reines Lesen.
