@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 import aiohttp
 
@@ -34,24 +35,34 @@ def _headers_base() -> dict[str, str]:
     }
 
 
+def _host_candidates(alias: str | None) -> list[str]:
+    """Kandidaten-Slugs aus dem eGym-Studio-Alias (z. B. '7stark Wendlingen').
+
+    Der Netpulse-Host ist {chainAlias}.netpulse.com; der Studio-Alias enthaelt aber
+    Chain + Ort. Daher: erst das erste Wort (Chain, '7stark'), dann Zusammenschreibung.
+    """
+    words = re.findall(r"[a-z0-9]+", (alias or "").lower())
+    if not words:
+        return []
+    cands = [words[0], "".join(words)]
+    return list(dict.fromkeys(c for c in cands if c))  # dedupe, Reihenfolge erhalten
+
+
 async def detect_host(session: aiohttp.ClientSession, alias: str | None) -> str | None:
     """Leitet den Brand-Host aus dem eGym-Studio-Alias ab und validiert ihn.
 
-    Netpulse-Host = {chainAlias}.netpulse.com, und chainAlias == eGym-Studio-Alias
-    (verifiziert fuer 7stark). Prueft per unauth GET /np/brand/description, dass der
-    Host existiert und derselbe Alias zurueckkommt. None, wenn nicht ableitbar.
+    Probiert die Kandidaten gegen den unauth GET /np/brand/description und nimmt den
+    ersten, der 200 + chainAlias liefert. None, wenn keiner passt (-> manuell/aus).
     """
-    slug = "".join(c for c in (alias or "").lower() if c.isalnum())
-    if not slug:
-        return None
-    host = f"{slug}.netpulse.com"
-    try:
-        async with session.get(f"https://{host}{NP_BRAND_DESC}",
-                               headers=_headers_base()) as r:
-            if r.status == 200 and (await r.json()).get("chainAlias"):
-                return host
-    except Exception as err:  # noqa: BLE001 – Netz/DNS: nicht ableitbar
-        _LOGGER.debug("Netpulse-Host-Erkennung fuer %r fehlgeschlagen: %s", host, err)
+    for slug in _host_candidates(alias):
+        host = f"{slug}.netpulse.com"
+        try:
+            async with session.get(f"https://{host}{NP_BRAND_DESC}",
+                                   headers=_headers_base()) as r:
+                if r.status == 200 and (await r.json()).get("chainAlias"):
+                    return host
+        except Exception as err:  # noqa: BLE001 – Netz/DNS: Kandidat existiert nicht
+            _LOGGER.debug("Netpulse-Host-Kandidat %r verworfen: %s", host, err)
     return None
 
 
