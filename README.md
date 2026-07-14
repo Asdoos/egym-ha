@@ -4,7 +4,14 @@ White-Label-Integration für Fitnessstudios auf der **eGym/Netpulse**-Plattform
 (z. B. 7stark, EGYM Wellpass u. a.). Liest deine Fitnessdaten über die eGym-MWA-API.
 
 ## Installation
-1. Ordner `egym/` nach `<HA-config>/custom_components/` kopieren.
+
+### HACS (empfohlen)
+1. HACS → ⋮ → **Custom repositories** → `https://github.com/Asdoos/egym-ha`, Kategorie **Integration**.
+2. „eGym / Wellpass Studio" installieren, Home Assistant neu starten.
+3. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „eGym / Wellpass Studio"**.
+
+### Manuell
+1. Ordner `custom_components/egym/` nach `<HA-config>/custom_components/` kopieren.
 2. Home Assistant neu starten.
 3. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „eGym / Wellpass Studio"**.
 
@@ -21,6 +28,7 @@ White-Label-Integration für Fitnessstudios auf der **eGym/Netpulse**-Plattform
 | Körper | BMI, Körperfett, Skelettmuskelmasse, Körperfettmasse, Körperwasser (% / L) |
 | Kardio | Ruhepuls, VO2max *(nur wenn Werte hinterlegt)* |
 | Training | Letztes Training (Zeitstempel), Trainings gesamt |
+| Studio | Studio-Auslastung (Live, % — Netpulse) |
 | Sonstiges | Muskel-Dysbalancen, Mitglied seit |
 
 Sensoren ohne hinterlegte Werte (z. B. Kardio, wenn nie gemessen) erscheinen als *nicht verfügbar*
@@ -35,9 +43,9 @@ und aktivieren sich automatisch, sobald im Studio Werte erfasst werden.
 ## Hinweise & Grenzen
 - **Daten sind global** an deinem eGym-Account, nicht am Studio — die Studio-Wahl steuert Anzeige/
   Branding und den Workouts-Kontext, nicht die Messwerte.
-- **Live Capacity (Studio-Auslastung)** ist ein Netpulse-Feature; Code liegt in `netpulse_api.py`,
-  ist aber blockiert (Netpulse-Session via eGym-SSO nötig, nicht Passwort — Details `../../NETPULSE-LiveCapacity-Anleitung.md`).
-  Der Sensor deaktiviert sich selbst, bis der Handshake gemappt ist.
+- **Studio-Auslastung (Live Capacity)** kommt aus der Netpulse-API (`netpulse_api.py`): Login mit
+  denselben Zugangsdaten, dann Prozentwert des Heimstudios (`used/total`). Der Sensor erscheint nur,
+  wenn dein Studio überhaupt Auslastungsdaten liefert; sonst bleibt er unbelegt.
 - **Andere Marken:** Für nicht-eGym-Marken ggf. `CLIENT_ID` in `const.py` anpassen.
 - Reverse-engineerte, inoffizielle API — kann sich jederzeit ändern. Nur eigener Account, moderates Polling.
 
