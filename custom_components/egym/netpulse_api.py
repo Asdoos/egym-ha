@@ -1,14 +1,19 @@
-"""Netpulse-Client fuer die Studio-Auslastung (Live Capacity).
+"""Netpulse-Client: Studio-Auslastung + Activity-Level, Challenges, Kurse, Club-Infos.
 
 Per HTTPS-Mitschnitt der 7stark-App verifiziert (2026-07-14):
 - Login: POST {brand-host}/np/exerciser/login, FORM-encoded username+password.
-  Antwort-JSON hat homeClubUuid + chainUuid; Session per Set-Cookie (JSESSIONID).
-  WICHTIG: brand-spezifischer Host (7stark.netpulse.com), sonst 401
-  "StandardizedFlows not enabled for current brand".
-- Capacity: GET /np/locations/v1.0/gym-chains/{chainUuid}/location-details ->
-  Liste von Studios, jedes mit utilization:{gymLocationId,totalCapacity,usedCapacity}.
-  Prozent wie in der App: round(usedCapacity / totalCapacity * 100).
-- Header: X-NP-API-Version 1.5, X-NP-APP-Version, X-NP-User-Agent (applicationName=7stark).
+  Antwort-JSON hat uuid (exerciser), homeClubUuid, chainUuid; Session per Set-Cookie
+  (JSESSIONID). Brand-spezifischer Host noetig, sonst 401 "StandardizedFlows...".
+- Dieselbe JSESSIONID gilt fuer 7stark.netpulse.com UND mobile-api.int.api.egym.com
+  (im Mitschnitt identischer Cookie-Wert) -> ein Login, alle Daten:
+  * Capacity : GET {host}/np/locations/v1.0/gym-chains/{chainUuid}/location-details
+               -> [{uuid, utilization:{totalCapacity,usedCapacity}}]
+  * Kurse    : GET {host}/np/company/{clubUuid}/classes -> [{brief:{name,startDateTime,...}}]
+  * Club-Info: GET {host}/np/company/{clubUuid}/topics  -> {total, items:[{title,...}]}
+  * Activity : GET mobile-api/analysis/api/v1.0/exercisers/{uuid}/activitylevels
+               -> {points,goal,daysLeft,level,maintainPoints}
+  * Challenges: GET mobile-api/challenges/api/v1.0/exercisers/{uuid}/machine-challenges
+               -> {challenges:[{name,userRanking,totalParticipants,...}]}
 """
 from __future__ import annotations
 
@@ -19,7 +24,8 @@ import re
 import aiohttp
 
 from .const import (
-    NP_LOGIN, NP_LOCATION_DETAILS, NP_BRAND_DESC,
+    NP_LOGIN, NP_LOCATION_DETAILS, NP_BRAND_DESC, NP_CLASSES, NP_TOPICS,
+    EGYM_MOBILE_BASE, NP_ACTIVITY, NP_MACHINE_CHALLENGES,
     NP_API_VERSION, NP_APP_VERSION, NP_USER_AGENT,
 )
 
@@ -66,8 +72,8 @@ async def detect_host(session: aiohttp.ClientSession, alias: str | None) -> str 
     return None
 
 
-class NetpulseCapacityClient:
-    """Loggt sich bei Netpulse ein und liest die Auslastung des Heimstudios."""
+class NetpulseClient:
+    """Loggt sich EINMAL bei Netpulse ein und holt alle Cookie-basierten Daten."""
 
     def __init__(self, session: aiohttp.ClientSession, email: str, password: str,
                  host: str) -> None:
@@ -82,8 +88,8 @@ class NetpulseCapacityClient:
             h["Cookie"] = cookie
         return h
 
-    async def _login(self) -> tuple[str, str, str]:
-        """Gibt (chainUuid, homeClubUuid, JSESSIONID-Cookie). Wirft bei !=200/Netzfehler."""
+    async def _login(self) -> tuple[str, str, str, str]:
+        """(uuid, chainUuid, homeClubUuid, JSESSIONID-Cookie). Wirft bei !=200/Netzfehler."""
         # data=... -> FormBody (application/x-www-form-urlencoded), wie die App.
         async with self._s.post(
             self._base + NP_LOGIN,
@@ -100,21 +106,40 @@ class NetpulseCapacityClient:
                 if raw.startswith("JSESSIONID="):
                     cookie = raw.split(";", 1)[0]  # "JSESSIONID=<wert>"
                     break
-        chain, home = data.get("chainUuid"), data.get("homeClubUuid")
-        if not chain or not home or not cookie:
+        uuid, chain, home = data.get("uuid"), data.get("chainUuid"), data.get("homeClubUuid")
+        if not uuid or not chain or not home or not cookie:
             raise NetpulseError(
-                f"Login ok, aber chainUuid/homeClubUuid/Session fehlt "
-                f"(chain={chain!r}, home={home!r})")
-        return chain, home, cookie
+                f"Login ok, aber uuid/chainUuid/homeClubUuid/Session fehlt "
+                f"(uuid={uuid!r}, chain={chain!r}, home={home!r})")
+        return uuid, chain, home, cookie
 
-    async def get_capacity(self) -> dict | None:
-        """{'percent','used','total'} oder None (Studio ohne Auslastungsdaten)."""
-        chain, home, cookie = await self._login()
-        async with self._s.get(self._base + NP_LOCATION_DETAILS % chain,
-                               headers=self._headers(cookie)) as r:
+    async def fetch(self) -> dict:
+        """Login + alle Endpunkte. Einzelne Fehler -> None fuer das Feld, kein Abbruch.
+
+        Login-Fehler propagieren (Coordinator pausiert bei 401/403).
+        """
+        uuid, chain, home, cookie = await self._login()
+        capacity = await self._safe(self._capacity(chain, home, cookie))
+        activity = await self._safe(self._json(EGYM_MOBILE_BASE + NP_ACTIVITY % uuid, cookie))
+        chal = await self._safe(self._json(EGYM_MOBILE_BASE + NP_MACHINE_CHALLENGES % uuid, cookie))
+        classes = await self._safe(self._json(self._base + NP_CLASSES % home, cookie))
+        topics = await self._safe(self._json(self._base + NP_TOPICS % home, cookie))
+        return {
+            "capacity": capacity,
+            "activity": activity if isinstance(activity, dict) else None,
+            "challenges": (chal or {}).get("challenges") if isinstance(chal, dict) else None,
+            "classes": classes if isinstance(classes, list) else None,
+            "topics": topics if isinstance(topics, dict) else None,
+        }
+
+    async def _json(self, url: str, cookie: str):
+        async with self._s.get(url, headers=self._headers(cookie)) as r:
             r.raise_for_status()
-            locations = await r.json()
+            return await r.json()
 
+    async def _capacity(self, chain: str, home: str, cookie: str) -> dict | None:
+        """{'percent','used','total'} oder None (Studio ohne Auslastungsdaten)."""
+        locations = await self._json(self._base + NP_LOCATION_DETAILS % chain, cookie)
         util = _utilization_for(locations, home)
         if not util:
             return None
@@ -122,6 +147,13 @@ class NetpulseCapacityClient:
         if used is None or not total:  # not total -> auch 0 abfangen (Div/0)
             return None
         return {"percent": round(used / total * 100), "used": used, "total": total}
+
+    async def _safe(self, coro):
+        try:
+            return await coro
+        except Exception as err:  # noqa: BLE001 – Einzel-Endpunkt: nur dieses Feld None
+            _LOGGER.debug("Netpulse-Teilabruf fehlgeschlagen: %s", err)
+            return None
 
 
 def _utilization_for(locations, home_club_uuid) -> dict | None:

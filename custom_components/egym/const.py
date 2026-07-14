@@ -38,6 +38,13 @@ CONF_NP_HOST = "netpulse_host"   # aus Studio-Alias erkannt oder manuell; KEIN D
 NP_LOGIN = "/np/exerciser/login"
 NP_LOCATION_DETAILS = "/np/locations/v1.0/gym-chains/%s/location-details"
 NP_BRAND_DESC = "/np/brand/description"   # unauth; chainAlias == Host-Subdomain
+# Weitere Daten hinter DERSELBEN Netpulse-Session (JSESSIONID gilt auch fuer egym!):
+NP_CLASSES = "/np/company/%s/classes"     # Kursplan (auf dem Brand-Host)  %s=clubUuid
+NP_TOPICS = "/np/company/%s/topics"       # Club-Infos                     %s=clubUuid
+# mobile-api ist ein fester eGym-Host, akzeptiert dieselbe JSESSIONID (nicht Bearer):
+EGYM_MOBILE_BASE = "https://mobile-api.int.api.egym.com"
+NP_ACTIVITY = "/analysis/api/v1.0/exercisers/%s/activitylevels"          # %s=exerciserUuid
+NP_MACHINE_CHALLENGES = "/challenges/api/v1.0/exercisers/%s/machine-challenges"  # %s=exerciserUuid
 
 # Header aus dem Mitschnitt (App v1.2, versionCode 110; deviceUid war leer).
 NP_API_VERSION = "1.5"

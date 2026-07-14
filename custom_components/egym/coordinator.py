@@ -14,7 +14,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
 from .api import EgymApi
 from .const import CONF_NP_HOST, CONF_STUDIO_ID, DOMAIN, SCAN_INTERVAL
-from .netpulse_api import NetpulseCapacityClient
+from .netpulse_api import NetpulseClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class EgymCoordinator(DataUpdateCoordinator):
         zone = self.hass.config.time_zone or "UTC"
         imbalances = await self._optional(self.api.get_muscle_imbalances(zone))
         membership = await self._optional(self.api.get_membership())
-        capacity = await self._capacity()
+        netpulse = await self._netpulse()  # capacity + activity + challenges + classes + topics
 
         # rotierte Tokens persistieren -> Neustart ohne Re-Login
         access, refresh = self.api.tokens
@@ -58,31 +58,28 @@ class EgymCoordinator(DataUpdateCoordinator):
         metrics = {m["type"]: m for m in metrics_raw if m.get("value") is not None}
         return {"profile": profile, "bioage": bioage, "metrics": metrics,
                 "workouts": workouts, "imbalances": imbalances, "membership": membership,
-                "capacity": capacity}
+                **netpulse}
 
-    async def _capacity(self) -> dict | None:
-        """Netpulse Studio-Auslastung. Auth-Ablehnung pausiert bis Reload."""
+    async def _netpulse(self) -> dict:
+        """Alle Netpulse-Daten in einem Login. Auth-Ablehnung pausiert bis Reload."""
         host = self.entry.data.get(CONF_NP_HOST)
         if self._np_paused or not host:  # kein Host -> Feature aus (kein Default)
-            return None
-        client = NetpulseCapacityClient(
+            return {}
+        client = NetpulseClient(
             self.api.session,
             self.entry.data[CONF_EMAIL], self.entry.data[CONF_PASSWORD],
             host=host,
         )
         try:
-            cap = await client.get_capacity()
+            return await client.fetch()
         except Exception as err:  # noqa: BLE001 – Login/Netz: nur diesen Poll ueberspringen
             if getattr(err, "status", None) in (401, 403):  # Auth abgelehnt -> nicht hammern
                 self._np_paused = True
-                _LOGGER.warning("Studio-Auslastung: Login abgelehnt (%s). Pausiert bis zum "
-                                "Neuladen der Integration (Lockout-Schutz).", err)
+                _LOGGER.warning("Netpulse: Login abgelehnt (%s). Pausiert bis zum Neuladen "
+                                "der Integration (Lockout-Schutz).", err)
             else:
-                _LOGGER.warning("Studio-Auslastung: Netpulse-Abruf fehlgeschlagen: %s", err)
-            return None
-        if cap is None:
-            _LOGGER.debug("Studio-Auslastung: Studio liefert kein capacity-Objekt")
-        return cap
+                _LOGGER.warning("Netpulse-Abruf fehlgeschlagen: %s", err)
+            return {}
 
     async def _optional(self, coro):
         """Wrapper fuer nicht-kritische Endpunkte -> None statt UpdateFailed."""

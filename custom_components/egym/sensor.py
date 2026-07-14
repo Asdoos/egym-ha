@@ -83,6 +83,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry,
     # Immer anlegen: sonst verschwindet der Sensor dauerhaft, wenn der erste
     # Netpulse-Abruf (Login/Studio ohne capacity) scheitert. Ohne Daten -> "unbekannt".
     entities.append(EgymCapacitySensor(coordinator, entry))
+    # Weitere Netpulse-Daten nur, wenn der Login sie geliefert hat.
+    if coordinator.data.get("activity"):
+        entities.append(EgymActivityLevelSensor(coordinator, entry))
+        entities.append(EgymActivityPointsSensor(coordinator, entry))
+    if coordinator.data.get("challenges") is not None:
+        entities.append(EgymChallengesSensor(coordinator, entry))
+    if coordinator.data.get("classes"):
+        entities.append(EgymNextClassSensor(coordinator, entry))
+    if coordinator.data.get("topics"):
+        entities.append(EgymClubInfoSensor(coordinator, entry))
     add_entities(entities)
 
 
@@ -260,3 +270,123 @@ class EgymMembershipSensor(_Base):
         return {"uuid": m.get("uuid"),
                 "end": m.get("membershipEndTimestamp"),
                 "next_billing": m.get("nextBillingTimestamp")}
+
+
+class EgymActivityLevelSensor(_Base):
+    """eGym Activity Level (wood/steel/... )."""
+    _attr_state_class = None
+    _attr_icon = "mdi:medal"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry, "activity_level")
+        self._attr_name = "Aktivitätslevel"
+
+    @property
+    def native_value(self):
+        return (self.coordinator.data.get("activity") or {}).get("level")
+
+    @property
+    def extra_state_attributes(self):
+        a = self.coordinator.data.get("activity") or {}
+        return {"points": a.get("points"), "goal": a.get("goal"),
+                "days_left": a.get("daysLeft"), "maintain_points": a.get("maintainPoints")}
+
+
+class EgymActivityPointsSensor(_Base):
+    """Aktivitätspunkte der laufenden Periode (Ziel als Attribut)."""
+    _attr_icon = "mdi:star-four-points"
+    _attr_native_unit_of_measurement = "Punkte"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry, "activity_points")
+        self._attr_name = "Aktivitätspunkte"
+
+    @property
+    def native_value(self):
+        return (self.coordinator.data.get("activity") or {}).get("points")
+
+    @property
+    def extra_state_attributes(self):
+        a = self.coordinator.data.get("activity") or {}
+        return {"goal": a.get("goal"), "days_left": a.get("daysLeft")}
+
+
+class EgymChallengesSensor(_Base):
+    """Anzahl aktiver Maschinen-Challenges (eGym Gameday etc.)."""
+    _attr_icon = "mdi:trophy"
+    _attr_native_unit_of_measurement = "Challenges"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry, "active_challenges")
+        self._attr_name = "Aktive Challenges"
+
+    def _items(self) -> list[dict]:
+        return self.coordinator.data.get("challenges") or []
+
+    @property
+    def native_value(self):
+        return len(self._items())
+
+    @property
+    def extra_state_attributes(self):
+        items = self._items()
+        return {"joined": sum(1 for c in items if c.get("userJoined")),
+                "challenges": [c.get("name") for c in items]}
+
+
+def _next_class(coordinator) -> dict | None:
+    """Naechster noch nicht begonnener Kurs (kleinste startDateTime >= jetzt)."""
+    now_ms = dt_util.utcnow().timestamp() * 1000
+    briefs = [c.get("brief") or {} for c in (coordinator.data.get("classes") or [])]
+    upcoming = [b for b in briefs if b.get("startDateTime") and b["startDateTime"] >= now_ms]
+    return min(upcoming, key=lambda b: b["startDateTime"]) if upcoming else None
+
+
+class EgymNextClassSensor(_Base):
+    """Startzeitpunkt des naechsten Kurses im Heimstudio."""
+    _attr_state_class = None
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry, "next_class")
+        self._attr_name = "Nächster Kurs"
+
+    @property
+    def native_value(self):
+        b = _next_class(self.coordinator)
+        return dt_util.utc_from_timestamp(b["startDateTime"] / 1000) if b else None
+
+    @property
+    def extra_state_attributes(self):
+        b = _next_class(self.coordinator) or {}
+        maxc, booked = b.get("maxCapacity"), b.get("totalBooked")
+        free = maxc - booked if maxc is not None and booked is not None else None
+        return {"name": b.get("name"),
+                "free_spots": free,
+                "booked": b.get("booked"),
+                "upcoming_count": sum(
+                    1 for c in (self.coordinator.data.get("classes") or [])
+                    if (c.get("brief") or {}).get("startDateTime", 0) >= dt_util.utcnow().timestamp() * 1000)}
+
+
+class EgymClubInfoSensor(_Base):
+    """Anzahl der Club-Info-Themen (Netpulse topics)."""
+    _attr_icon = "mdi:bulletin-board"
+    _attr_native_unit_of_measurement = "Themen"
+
+    def __init__(self, coordinator, entry) -> None:
+        super().__init__(coordinator, entry, "club_info")
+        self._attr_name = "Club-Infos"
+
+    def _topics(self) -> dict:
+        return self.coordinator.data.get("topics") or {}
+
+    @property
+    def native_value(self):
+        t = self._topics()
+        return t.get("total") if t.get("total") is not None else len(t.get("items") or [])
+
+    @property
+    def extra_state_attributes(self):
+        return {"titles": [i.get("title") for i in (self._topics().get("items") or [])]}

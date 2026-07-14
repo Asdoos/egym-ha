@@ -28,7 +28,7 @@ White-Label-Integration für Fitnessstudios auf der **eGym/Netpulse**-Plattform
 | Körper | BMI, Körperfett, Skelettmuskelmasse, Körperfettmasse, Körperwasser (% / L) |
 | Kardio | Ruhepuls, VO2max *(nur wenn Werte hinterlegt)* |
 | Training | Letztes Training (Zeitstempel), Trainings gesamt |
-| Studio | Studio-Auslastung (Live, % — Netpulse) |
+| Studio (Netpulse) | Studio-Auslastung (Live %), Aktivitätslevel, Aktivitätspunkte, Aktive Challenges, Nächster Kurs, Club-Infos |
 | Sonstiges | Muskel-Dysbalancen, Mitglied seit |
 
 Sensoren ohne hinterlegte Werte (z. B. Kardio, wenn nie gemessen) erscheinen als *nicht verfügbar*
