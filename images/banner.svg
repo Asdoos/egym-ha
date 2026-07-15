@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="280" viewBox="0 0 1000 280" role="img" aria-label="eGym / Wellpass Studio — Home Assistant Integration">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="0.55" stop-color="#0f2033"/>
+      <stop offset="1" stop-color="#08131f"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#41BDF5"/>
+      <stop offset="1" stop-color="#18E1A5"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="280" rx="20" fill="url(#bg)"/>
+  <rect x="1" y="1" width="998" height="278" rx="19" fill="none" stroke="#1c3348" stroke-width="2"/>
+
+  <!-- Subtle grid dots -->
+  <g fill="#17324a" opacity="0.5">
+    <circle cx="880" cy="40" r="2"/><circle cx="920" cy="40" r="2"/><circle cx="960" cy="40" r="2"/>
+    <circle cx="880" cy="80" r="2"/><circle cx="920" cy="80" r="2"/><circle cx="960" cy="80" r="2"/>
+    <circle cx="880" cy="120" r="2"/><circle cx="920" cy="120" r="2"/><circle cx="960" cy="120" r="2"/>
+  </g>
+
+  <!-- Icon badge -->
+  <g transform="translate(70,84)">
+    <rect x="-24" y="-24" width="112" height="112" rx="24" fill="#0d2135" stroke="url(#accent)" stroke-width="2.5"/>
+    <!-- Dumbbell -->
+    <g stroke="url(#accent)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#glow)">
+      <line x1="4" y1="14" x2="60" y2="14"/>
+      <line x1="4" y1="14" x2="4" y2="2"/>
+      <line x1="4" y1="14" x2="4" y2="26"/>
+      <line x1="60" y1="14" x2="60" y2="2"/>
+      <line x1="60" y1="14" x2="60" y2="26"/>
+    </g>
+    <!-- Heart-pulse line -->
+    <polyline points="0,52 16,52 24,36 34,66 44,46 52,52 64,52"
+      fill="none" stroke="#18E1A5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+  </g>
+
+  <!-- Title -->
+  <text x="200" y="118" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="52" font-weight="700" fill="#ffffff">eGym / Wellpass Studio</text>
+  <text x="202" y="162" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="26" font-weight="500" fill="#8fb4cf">Home&#160;Assistant&#160;Integration</text>
+
+  <!-- Divider -->
+  <rect x="202" y="184" width="470" height="3" rx="1.5" fill="url(#accent)" opacity="0.8"/>
+
+  <!-- Feature chips -->
+  <g font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="600">
+    <g transform="translate(202,208)">
+      <rect width="150" height="34" rx="17" fill="#0d2135" stroke="#26506e" stroke-width="1.5"/>
+      <text x="75" y="22" text-anchor="middle" fill="#c7dcec">BioAge &amp; Körper</text>
+    </g>
+    <g transform="translate(364,208)">
+      <rect width="160" height="34" rx="17" fill="#0d2135" stroke="#26506e" stroke-width="1.5"/>
+      <text x="80" y="22" text-anchor="middle" fill="#c7dcec">Live-Auslastung</text>
+    </g>
+    <g transform="translate(536,208)">
+      <rect width="136" height="34" rx="17" fill="#0d2135" stroke="#26506e" stroke-width="1.5"/>
+      <text x="68" y="22" text-anchor="middle" fill="#c7dcec">~20 Sensoren</text>
+    </g>
+  </g>
+</svg>

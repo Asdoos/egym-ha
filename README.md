@@ -1,5 +1,9 @@
 # eGym / Wellpass Studio — Home Assistant Integration
 
+<p align="center">
+  <img src="images/banner.svg" alt="eGym / Wellpass Studio — Home Assistant Integration" width="100%">
+</p>
+
 [![HACS: Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
 [![Integration](https://img.shields.io/badge/Home%20Assistant-Integration-03A9F4.svg)](https://www.home-assistant.io/)
 [![Version](https://img.shields.io/badge/version-0.1.0-brightgreen.svg)](https://github.com/Asdoos/egym-ha/releases)
